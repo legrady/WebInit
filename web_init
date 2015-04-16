@@ -1,0 +1,323 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+use Cwd;
+use File::Basename;
+use File::Path 'make_path';
+
+# ☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰
+# CONSTANTS - do not modify.
+# CONFIGURATION section is lower down
+#
+my $ROOT  = q{/};
+my $SLASH = q{/};
+my $EMPTY = q{};
+
+my @NPM_PACKAGES = qw( gulp gulp-connect connect-history-api-fallback
+                       gulp-jshint gulp-useref gulp-if gulp-uglify
+                       gulp-minify-css gulp-stylus nib
+);
+# ☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰
+# CONFIGURATION SECTION
+#
+my $PARENT_DIR   = '/SW/';
+my @NPM_INIT_CMD = qw( /usr/bin/npm init );
+my @NPM_INSTALL  = qw( /usr/bin/npm install --save-dev);
+my $AUTHOR       = 'Tom Legrady';
+my $EMAIL        = 'Tom@TomLegrady.com';
+
+# ☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰
+# UTILITY ROUTINES
+#
+sub say {
+    print @_, "\n";
+}
+
+# ☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰
+# SUBROUTINES
+#
+# ----------------------------------------------------------------------
+# Determine project name from file path, if possible.
+#
+sub extract_project_name_from_path {
+
+    my $dir = getcwd();
+    my $idx = index $dir, $PARENT_DIR;
+    if ( $idx > -1 ) {
+        my $name = substr $dir, $idx + length $PARENT_DIR;
+        $name =~ s{/}{_}gxms;
+        return $name;
+    }
+}
+
+sub ask_user_for_project_name {
+    my ($name) = @_;
+
+    while ( !$name ) {
+        $name = <STDIN>;
+        chomp $name;
+        print "Press Ctrl-C to quit the program, or type a valid path name"
+            unless $name;
+    }
+    return $name;
+}
+
+# ----------------------------------------------------------------------
+#
+{
+    my $project_name_from = 'path';
+
+    sub determine_project_name {
+
+        my $name = extract_project_name_from_path;
+
+        if ( !$name ) {
+            say "Could not find '$PARENT_DIR' in current path '@{[getcwd]}'.";
+            say
+                "Please enter the name of the directory (and git_repo) to create:";
+
+            $name              = ask_user_for_project_name $name;
+            $project_name_from = 'user';
+        }
+
+        return $name;
+    }
+
+    sub in_dir {
+        return $project_name_from eq 'path';
+    }
+}
+
+# ----------------------------------------------------------------------
+#
+sub chdir_if_needed {
+    my ($name) = @_;
+    return if in_dir;
+
+    make_path $name
+        unless -e $name;
+    chdir $name;
+}
+
+# ----------------------------------------------------------------------
+# Convert project path consisting of multiple directories to a camelCase
+# name with no slashes.
+#
+sub slash_to_camel_case {
+    my ($path) = @_;
+
+    my @names = split $SLASH, $path;
+    return $path unless scalar @names > 1;
+
+    foreach my $idx ( 1 .. $#names ) {
+        $names[$idx] = ucfirst $names[$idx];
+    }
+    return join $EMPTY, @names;
+}
+
+# ----------------------------------------------------------------------
+# Create package.json file.
+#
+sub create_package_json {
+    
+    return if -e 'package.json';
+    
+    system(@NPM_INIT_CMD);
+}
+
+# ----------------------------------------------------------------------
+# Create bower.json file.
+#
+sub create_bower_json {
+    my ($name) = @_;
+
+    return if -e 'bower.json';
+    
+    open my $cfg, '>', 'bower.json'
+        or die("Could not open 'bower.json': $!.");
+
+    print $cfg <<"EOCFG";
+
+{
+    "name": "$name",
+    "version":      "0.0.1",
+    "description":  "Web application '$name'",
+    "dependencies": {}
+}
+
+
+EOCFG
+    close $cfg;
+
+}
+
+# ----------------------------------------------------------------------
+# Create README markdown file
+#
+sub create_readme {
+    my ($name) = @_;
+
+    return if -e 'README.md';
+    
+    my $double_underline = '=' x length $name;
+    my $date             = scalar localtime;
+
+    open my $readme, '>', 'README.md'
+        or die("Could not open 'README.md': $!.");
+
+    print $readme <<"EOCFG";
+    
+$name
+$double_underline
+
+Summary
+-------
+
+Describe project succinctly.
+
+author: $AUTHOR
+email:  $EMAIL
+date:   $date
+
+EOCFG
+
+    close $readme;
+}
+
+# ----------------------------------------------------------------------
+# Create .gitignore file
+#
+sub create_gitignore {
+
+    return if -e '.gitignore';
+    
+    open my $cfg, '>', '.gitignore'
+        or die("Could not open '.gitignore': $!.");
+
+    print $cfg <<"EOCFG";
+
+#*#
+*~
+*.tdy
+*.ERR
+
+EOCFG
+
+    close $cfg;
+}
+
+# ----------------------------------------------------------------------
+# Create Atom editor config file.
+#
+sub create_editor_config {
+
+    return if -e '.editorconfig';
+    
+    open my $cfg, '>', '.editorconfig'
+        or die("Could not open '.editorconfig': $!.");
+
+    print $cfg <<"EOCFG";
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_tailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailin_whitespace = false
+indent_style = tab
+
+EOCFG
+
+    close $cfg;
+
+}
+
+# ----------------------------------------------------------------------
+# Create JSHint config file
+#
+sub create_jshintrc {
+
+    return if -e '.jshintrc';
+    
+    open my $cfg, '>', '.jshintrc'
+        or die("Could not open '.jshintrc': $!.");
+
+    print $cfg <<"EOCFG";
+
+{
+    "node": true,
+    "browser":      true,
+    "esnext":       true,
+    "bitwise":      true,
+    "camelcase":    true,
+    "curly":        true,
+    "eqeqeq":       true,
+    "immed":        true,
+    "indent":       4,
+    "latedef":      true,
+    "newcap":       true,
+    "noarg":        true,
+    "quotmark":     "single",
+    "undef":        true,
+    "unused":       true,
+    "strict":       true,
+    "trailing":     true,
+    "smarttabs":    true,
+    "jquery":       true,
+    "globals":      {
+	"angular":      false
+    }
+}
+
+EOCFG
+    
+    close $cfg;
+}
+
+# ----------------------------------------------------------------------
+# Create metadata files
+#
+sub create_files {
+    my ( $project ) = @_;
+
+    create_package_json;
+    create_bower_json $project->{name};
+    create_readme  $project->{name};
+    create_gitignore
+    create_editor_config;
+    create_jshintrc;
+}
+# ----------------------------------------------------------------------
+# Install local NPM packages.
+#
+sub npm_install {
+
+    for my $pkg ( @NPM_PACKAGES ) {
+	say "Installing package $pkg";
+	system( @NPM_INSTALL, $pkg );
+    }
+
+    
+}
+
+# ☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰
+# MAIN LINE
+#
+sub main {
+    my $project = { path => determine_project_name() };
+    $project->{name} = slash_to_camel_case $project->{path};
+    chdir_if_needed $project->{path};
+
+    make_path 'app', 'app/css', 'app/js', 'app/view', 'dist';
+    create_files $project;
+
+    npm_install;
+}
+main();
+exit;
