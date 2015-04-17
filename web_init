@@ -132,10 +132,11 @@ sub create_package_json {
 sub create_bower_json {
     my ($name) = @_;
 
-    return if -e 'bower.json';
+    my $newfile = 'bower.json';
+    return if -e $newfile;
     
-    open my $cfg, '>', 'bower.json'
-        or die("Could not open 'bower.json': $!.");
+    open my $cfg, '>', '$newfile'
+        or die("Could not open '$newfile': $!.");
 
     print $cfg <<"EOCFG";
 
@@ -158,13 +159,14 @@ EOCFG
 sub create_readme {
     my ($name) = @_;
 
-    return if -e 'README.md';
+    my $newfile = 'README.md';
+    return if -e $newfile;
     
     my $double_underline = '=' x length $name;
     my $date             = scalar localtime;
 
-    open my $readme, '>', 'README.md'
-        or die("Could not open 'README.md': $!.");
+    open my $readme, '>', $newfile
+        or die("Could not open $newfile: $!.");
 
     print $readme <<"EOCFG";
     
@@ -190,10 +192,11 @@ EOCFG
 #
 sub create_gitignore {
 
-    return if -e '.gitignore';
+    my $newfile = '.gitignore';
+    return if -e $newfile;
     
-    open my $cfg, '>', '.gitignore'
-        or die("Could not open '.gitignore': $!.");
+    open my $cfg, '>', $newfile
+        or die("Could not open $newfile: $!.");
 
     print $cfg <<"EOCFG";
 
@@ -212,10 +215,11 @@ EOCFG
 #
 sub create_editor_config {
 
-    return if -e '.editorconfig';
+    my $newfile = '.editorconfig';
+    return if -e $newfile;
     
-    open my $cfg, '>', '.editorconfig'
-        or die("Could not open '.editorconfig': $!.");
+    open my $cfg, '>', $newfile
+        or die("Could not open $newfile: $!.");
 
     print $cfg <<"EOCFG";
 root = true
@@ -243,10 +247,11 @@ EOCFG
 #
 sub create_jshintrc {
 
-    return if -e '.jshintrc';
+    my $newfile = '.jshintrc';
+    return if -e $newfile;
     
-    open my $cfg, '>', '.jshintrc'
-        or die("Could not open '.jshintrc': $!.");
+    open my $cfg, '>', $newfile
+        or die("Could not open $newfile: $!.");
 
     print $cfg <<"EOCFG";
 
@@ -296,7 +301,7 @@ sub create_files {
 # ----------------------------------------------------------------------
 # Install local NPM packages.
 #
-sub npm_install {
+sub npm_install_packages {
 
     for my $pkg ( @NPM_PACKAGES ) {
 	say "Installing package $pkg";
@@ -304,6 +309,81 @@ sub npm_install {
     }
 
     
+}
+# ----------------------------------------------------------------------
+# Create gulpl file
+#
+sub create_gulpfile_js {
+
+    my $newfile = 'gulpfile.js';
+    return if -e $newfile;
+    
+    open my $cfg, '>', $newfile
+        or die("Could not open $newfile: $!.");
+
+    print $cfg <<"EOCFG";
+
+// ----------------------------------------------------------------------
+// Server
+//
+var gulp               = require('gulp'),
+    connect            = require('gulp-connect'),
+    historyApiFallback = require(connect-history-api-fallback');
+
+// Development web server
+//
+gulp.task('server', function() {
+    connect.server({
+        root: './app',
+        hostname: '0.0.0.0',
+        port: 8080,
+        livereload: true,
+        middleware: function(connect, opt) {
+            return [  historyApiFallback ];
+        }
+});
+// ----------------------------------------------------------------------
+// CSS preprocessor - 
+//
+var stylus = require('gulp-stylus'),
+    nib    = require('nib');
+
+// convert stylus files to css
+//
+gulp.task('css', function() {
+    gulp.src('./app/stylecheets/mail.styl')
+       .pipe(stylus({use: nib() }))
+       .pipe(gul.dest('.app/stylesheets'))
+       .pipe(connect.reload());
+});
+
+// Reload browser on HTML changes
+//
+gulp.task('html', function() {
+    gulp.src('./app/**/*.html')
+        .pipe(connect.reload());
+});
+
+// Watch code changes and run related tasks
+//
+gulp.task('watch', function() {
+    gulp.watch(['./app/**/*.html'], ['html']);
+    gulp.watch(['./app/stylesheets/**/*.styl'], ['css']);
+});
+
+gulp.task('default', ['server', 'watch']);
+
+EOCFG
+    close $cfg;
+}
+
+# ----------------------------------------------------------------------
+# Create more configuration files
+#
+sub create_more_files {
+    my ( $project ) = @_;
+
+    create_gulpfile_js;
 }
 
 # ☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰☰
@@ -314,10 +394,12 @@ sub main {
     $project->{name} = slash_to_camel_case $project->{path};
     chdir_if_needed $project->{path};
 
-    make_path 'app', 'app/css', 'app/js', 'app/view', 'dist';
+    make_path 'app', 'app/stylesheets', 'app/js', 'app/view', 'dist';
     create_files $project;
 
-    npm_install;
+    npm_install_packages;
+
+    create_more_files $project;
 }
 main();
 exit;
